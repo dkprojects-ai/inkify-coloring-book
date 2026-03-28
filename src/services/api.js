@@ -1,18 +1,22 @@
-import { APPS_SCRIPT_URL } from '../utils/constants.js';
+/**
+ * services/api.js
+ *
+ * All backend calls go through /api/proxy (Vercel serverless function).
+ * The proxy forwards to Apps Script server-side, bypassing browser CORS.
+ */
+
+const PROXY_URL = '/api/proxy';
 
 /**
- * post — Generic POST helper for the Apps Script backend.
- * Apps Script Web Apps sometimes redirect POST → GET, so we follow redirects.
- *
- * @param {Object} body - JSON payload
- * @returns {Promise<Object>} - Parsed JSON response
+ * post — Sends a JSON payload to the Vercel proxy.
+ * @param {Object} body
+ * @returns {Promise<Object>}
  */
 async function post(body) {
-  const response = await fetch(APPS_SCRIPT_URL, {
-    method:   'POST',
-    redirect: 'follow',
-    headers:  { 'Content-Type': 'text/plain' }, // 'text/plain' avoids CORS preflight with Apps Script
-    body:     JSON.stringify(body),
+  const response = await fetch(PROXY_URL, {
+    method:  'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body:    JSON.stringify(body),
   });
 
   if (!response.ok) {
@@ -23,7 +27,7 @@ async function post(body) {
   try {
     return JSON.parse(text);
   } catch (_) {
-    throw new Error('Invalid JSON response from server: ' + text.substring(0, 200));
+    throw new Error('Invalid response from server: ' + text.substring(0, 200));
   }
 }
 
