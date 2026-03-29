@@ -1,17 +1,10 @@
 /**
  * services/api.js
- *
- * All backend calls go through /api/proxy (Vercel serverless function).
- * The proxy forwards to Apps Script server-side, bypassing browser CORS.
+ * All calls go through /api/proxy (Vercel serverless) to avoid CORS.
  */
 
 const PROXY_URL = '/api/proxy';
 
-/**
- * post — Sends a JSON payload to the Vercel proxy.
- * @param {Object} body
- * @returns {Promise<Object>}
- */
 async function post(body) {
   const response = await fetch(PROXY_URL, {
     method:  'POST',
@@ -24,37 +17,17 @@ async function post(body) {
   }
 
   const text = await response.text();
+  let data;
   try {
-    return JSON.parse(text);
+    data = JSON.parse(text);
   } catch (_) {
-    throw new Error('Invalid response from server: ' + text.substring(0, 200));
+    throw new Error('Unexpected server response: ' + text.substring(0, 200));
   }
-}
 
-// ─────────────────────────────────────────────────────────────────────────────
-
-/**
- * generateColoringPage — Submits a new coloring-page generation job.
- *
- * @param {string} imageBase64 - Pure base64 image (no data-URI prefix)
- * @param {string} userId
- * @param {string} style       - 'cartoon' | 'realistic' | 'sketch'
- * @param {string} lineWidth   - 'thin' | 'medium' | 'thick'
- * @param {number} imageSizeBytes
- * @returns {Promise<{ status: string, jobId: string, estimatedTime: number, message: string }>}
- */
-export async function generateColoringPage(imageBase64, userId, style, lineWidth, imageSizeBytes) {
-  const data = await post({
-    action:         'generate-coloring-page',
-    image:          imageBase64,
-    userId:         userId,
-    style:          style,
-    lineWidth:      lineWidth,
-    imageSizeBytes: imageSizeBytes,
-  });
-
+  // Surface debug info from proxy if present
   if (data.status === 'error') {
-    const err = new Error(data.message || 'Failed to start generation.');
+    const detail = data.debug ? ` | Debug: ${data.debug.substring(0, 120)}` : '';
+    const err = new Error((data.message || 'Unknown error') + detail);
     err.code = data.code;
     throw err;
   }
@@ -62,32 +35,21 @@ export async function generateColoringPage(imageBase64, userId, style, lineWidth
   return data;
 }
 
-/**
- * checkJobStatus — Polls the backend for a job's current status.
- *
- * @param {string} jobId
- * @param {string} userId
- * @returns {Promise<{ status: string, jobId: string, downloadUrl?: string, eta?: number, errorMessage?: string }>}
- */
-export async function checkJobStatus(jobId, userId) {
-  const data = await post({
-    action: 'check-status',
-    jobId:  jobId,
-    userId: userId,
+export async function generateColoringPage(imageBase64, userId, style, lineWidth, imageSizeBytes) {
+  return post({
+    action: 'generate-coloring-page',
+    image:  imageBase64,
+    userId,
+    style,
+    lineWidth,
+    imageSizeBytes,
   });
-  return data;
 }
 
-/**
- * listMyColoringBooks — Returns all completed PDFs for the given user.
- *
- * @param {string} userId
- * @returns {Promise<{ status: string, pdfs: Array, totalCount: number }>}
- */
+export async function checkJobStatus(jobId, userId) {
+  return post({ action: 'check-status', jobId, userId });
+}
+
 export async function listMyColoringBooks(userId) {
-  const data = await post({
-    action: 'list-my-pdfs',
-    userId: userId,
-  });
-  return data;
+  return post({ action: 'list-my-pdfs', userId });
 }
